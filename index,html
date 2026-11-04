@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Time-Rewind Platformer - Pixel Art Sky</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; touch-action: manipulation; }
+    body {
+      background: #0d0f18;
+      color: #fff;
+      font-family: monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    
+    .overlay {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(13, 15, 24, 0.95);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      padding: 20px;
+      text-align: center;
+    }
+    .overlay h1 { color: #8be9fd; margin-bottom: 10px; font-size: 24px; }
+    .overlay h2 { color: #50fa7b; margin-bottom: 15px; }
+    .overlay p { color: #f8f8f2; margin-bottom: 10px; max-width: 500px; font-size: 14px; line-height: 1.4; }
+    
+    .btn-menu {
+      background: #bd93f9;
+      color: #111;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    .btn-menu:active { transform: scale(0.95); }
+    
+    .diff-container { display: flex; gap: 10px; margin-top: 15px; }
+    .btn-easy { background: #50fa7b; }
+    .btn-normal { background: #ffb86c; }
+    .btn-hard { background: #ff5555; color: #fff; }
+
+    canvas {
+      border: 2px solid #333;
+      background: #1a1a24;
+      box-shadow: 0 0 15px rgba(0,0,0,0.8);
+      max-width: 98vw;
+      max-height: 48vh;
+      image-rendering: pixelated;
+    }
+    
+    .controls {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 800px;
+      padding: 10px 15px;
+      margin-top: 5px;
+    }
+    .d-pad, .action-btns { display: flex; gap: 10px; align-items: center; }
+    .btn {
+      background: #282a36;
+      border: 2px solid #6272a4;
+      color: #fff;
+      font-size: 18px;
+      font-weight: bold;
+      width: 55px;
+      height: 55px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      cursor: pointer;
+    }
+    .btn:active { background: #44475a; transform: scale(0.95); }
+    .btn-rewind { background: #ff5555; border-color: #ff79c6; }
+    .btn-jump { background: #8be9fd; border-color: #50fa7b; color: #111; }
+    .btn-skip { background: #f1fa8c; border-color: #ffb86c; color: #111; font-size: 12px; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <!-- TUTORIAL -->
+  <div id="tutorialOverlay" class="overlay">
+    <h1>TIME-REWIND - 10 FASES PIXEL ART</h1>
+    <p><b>Visual:</b> Fundos em Pixel Art de acordo com a fase!</p>
+    <p><b>Objetivo:</b> Use o botão (R) de Rewind para criar um fantasma temporário que serve de plataforma e ativa botões!</p>
+    
+    <h2>Escolha a Dificuldade:</h2>
+    <div class="diff-container">
+      <button class="btn-menu btn-easy" onclick="startGame('easy')">Fácil</button>
+      <button class="btn-menu btn-normal" onclick="startGame('normal')">Normal</button>
+      <button class="btn-menu btn-hard" onclick="startGame('hard')">Difícil</button>
+    </div>
+  </div>
+
+  <!-- VITÓRIA -->
+  <div id="winOverlay" class="overlay" style="display: none;">
+    <h1>VICTORY!</h1>
+    <p>Você dominou o tempo e desvendou o enigma final!</p>
+    <button class="btn-menu" onclick="resetGame()">Jogar Novamente</button>
+  </div>
+
+  <canvas id="gameCanvas" width="800" height="400"></canvas>
+
+  <!-- CONTROLES -->
+  <div class="controls">
+    <div class="d-pad">
+      <div class="btn" id="btnLeft">←</div>
+      <div class="btn" id="btnRight">→</div>
+    </div>
+    <div class="action-btns">
+      <div class="btn btn-skip" id="btnSkip" onclick="skipLevel()">SKIP</div>
+      <div class="btn btn-rewind" id="btnRewind">R</div>
+      <div class="btn btn-jump" id="btnJump">↑</div>
+    </div>
+  </div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let currentLevelIndex = 0;
+let difficulty = 'normal';
+let isGameRunning = false;
+let rewindsUsed = 0;
+
+// Estrelas pré-geradas para o fundo
+const bgStars = [];
+for(let i = 0; i < 40; i++) {
+  bgStars.push({
+    x: Math.floor(Math.random() * 800),
+    y: Math.floor(Math.random() * 250),
+    size: Math.random() > 0.7 ? 4 : 2
+  });
+}
+
+// --- CONFIGURAÇÃO DAS 10 FASES ---
+const levels = [
+  // Fase 1: Introdução ao Botão Simples
+  {
+    bgType: 'day',
+    platforms: [{ x: 0, y: 360, w: 800, h: 40 }],
+    buttons: [{ x: 380, y: 350, w: 20, h: 10, type: 'hold', pressed: false }],
+    door: { x: 730, y: 280, w: 20, h: 80, open: false },
+    spawn: { x: 50, y: 300 }
+  },
+  // Fase 2: Plataforma Elevada
+  {
+    bgType: 'day',
+    platforms: [
+      { x: 0, y: 360, w: 800, h: 40 },
+      { x: 250, y: 260, w: 120, h: 20 }
+    ],
+    buttons: [{ x: 300, y: 250, w: 20, h: 10, type: 'hold', pressed: false }],
+    door: { x: 730, y: 280, w: 20, h: 80, open: false },
+    spawn: { x: 50, y: 300 }
+  },
+  // Fase 3: Introdução ao Botão Temporizado
+  {
+    bgType: 'day',
+    platforms: [
+      { x: 0, y: 360, w: 800, h: 40 },
+      { x: 200, y: 260, w: 120, h: 20 }
+    ],
+    buttons: [{ x: 250, y: 250, w: 20, h: 10, type: 'timer', timerDuration: 180, timer: 0, pressed: false }],
+    door: { x: 730, y: 280, w: 20, h: 80, open: false },
+    spawn: { x: 50, y: 300 }
+  },
+  // Fase 4: Dois Botões em Lados Opostos (1 de Manter Pressionado + 1 Temporizado)
+  {
+    bgType: 'sunset',
+    platforms: [
+      { x: 0, y: 360, w: 800, h: 40 },
+      { x: 150, y: 260, w: 100, h: 20 },
+      { x: 550, y: 260, w: 100, h: 20 }
+    ],
+    buttons: [
+      { x: 190, y: 250, w: 20, h: 10, type: 'hold', pressed: false },
+      { x: 590, y: 250, w: 20, h: 10, type: 'timer', timerDuration: 180, timer: 0, pressed: false }
+    ],
+    door: { x: 730, y: 280, w: 20, h: 80, open: false },
+    spawn: { x: 50, y: 300 }
+  },
+  // Fase 5: Parede Central Dividindo o Mapa
+  {
+    bgType: 'sunset',
+    platforms: [
+      { x: 0, y: 360, w: 800, h: 40 },
+      { x: 380, y: 160, w: 40, h: 200 },
+      { x: 150, y: 260, w: 120, h: 20 }
+    ],
+    buttons: [
+      { x: 200, y: 250, w: 20, h: 10, type: 'timer', timerDuration: 240, timer: 0, pressed: false },
+      { x: 500, y: 350, w: 20, h: 10, type: 'hold', pressed: false }
+    ],
+    door: { x: 730, y: 280, w: 20, h: 80, open: false },
+    spawn: { x: 50, y: 300 }
+  },
+  // Fase 6: Três Plataformas em Escada
+  {
+    bgType: 'night_crescent',
+    platforms: [
+      { x: 0, y: 360, w: 800, h: 40 },
+      { x: 120, y: 280, w: 100, h: 20 },
+      { x: 320, y: 200, w: 100, h: 20 },
+      { x: 520, y: 130, w: 100, h: 20 }
+    ],
+    buttons: [
+      { x: 160, y: 270, w: 20, h: 10, type: 'timer', timerDuration: 200, timer: 0, pressed: false },
+      { x: 560, y: 120, w: 20, h: 10, type: 'hold', pressed: false }
+    ],
+    door: { x: 730, y: 280, w: 20, h: 80, open: false },
+    spawn: { x: 50, y: 300 }
+  },
+  // Fase 7: Três Botões Simultâneos
+  {
+    bgType: 'night_crescent',
+    platforms: [
+      { x: 0, y: 360, w: 800, h: 40 },
+      { x: 200, y: 250, w: 80, h: 20 },
+      { x: 400, y: 180, w: 80, h: 20 },
+      { x: 600, y: 250, w: 80, h: 20 }
+    ],
+    buttons: [
+      { x: 230, y: 240, w: 20, h: 10, type: 'timer', timerDuration: 250, timer: 0, pressed: false },
+      { x: 430, y: 170, w: 20, h: 10, type: 'hold', pressed: false },
+      { x: 630, y: 240, w: 20, h: 10, type: 'timer', timerDuration: 200, timer: 0, pressed: false }
+    ],
+    door: { x: 730, y: 280, w: 20, h: 80, open: false },
+    spawn: { x: 50, y: 300 }
+  },
+  // Fase 8: Desafio de Precisão em Pulos
+  {
+    bgType: 'night_fullmoon',
+    platforms: [
+      { x: 0, y: 360, w: 200, h: 40 },
+      { x: 280, y: 300, w: 80, h: 20 },
+      { x: 440, y: 220, w: 80, h: 20 },
+      { x: 600, y: 360, w: 200, h: 40 }
+    ],
+    buttons: [
+      { x: 310, y: 290, w: 20, h: 10, type: 'timer', timerDuration: 180, timer: 0, pressed: false },
+      { x: 470, y: 210, w: 20, h: 10, type: 'timer', timerDuration: 180, timer: 0, pressed: false }
+    ],
+    door: { x: 730, y: 280, w: 20, h: 80, open: false },
+    spawn: { x: 50, y: 300 }
+  },
+  // Fase 9: A Grande Barreira
+  {
+    bgType: 'night_fullmoon',
+    platforms: [
+      { x: 0, y: 360, w: 800, h: 40 },
+      { x: 250, y: 100, w: 30, h: 260 },
+      { x: 520, y: 100, w: 30, h: 260 },
+      { x: 100, y: 240, w: 90, h: 20 },
+      { x: 360, y: 200, w: 90, h: 20 }
+    ],
+    buttons: [
+      { x: 130, y: 230, w: 20, h: 10, type: 'timer', timerDuration: 220, timer: 0, pressed: false },
+      { x: 400, y: 190, w: 20, h: 10, type: 'timer', timerDuration: 180, timer: 0, pressed: false },
+      { x: 620, y: 350, w: 20, h: 10, type: 'hold', pressed: false }
+    ],
+    door: { x: 740, y: 280, w: 20, h: 80, open: false },
+    spawn: { x: 40, y: 300 }
+  },
+  // Fase 10: ENIGMA DE 5 BOTÕES (SEQUÊNCIA FIXA 4 -> 2 -> 5 -> 3 -> 1)
+  {
+    isPuzzle: true,
+    puzzleSequence: [4, 2, 5, 3, 1],
+    currentStep: 0,
+    bgType: 'night_fullmoon',
+    platforms: [
+      { x: 0, y: 360, w: 800, h: 40 },
+      { x: 120, y: 280, w: 70, h: 20 },
+      { x: 250, y: 210, w: 70, h: 20 },
+      { x: 380, y: 140, w: 70, h: 20 },
+      { x: 510, y: 210, w: 70, h: 20 },
+      { x: 640, y: 280, w: 70, h: 20 }
+    ],
+    buttons: [
+      { id: 1, x: 145, y: 270, w: 20, h: 10, type: 'sequence', pressed: false },
+      { id: 2, x: 275, y: 200, w: 20, h: 10, type: 'sequence', pressed: false },
+      { id: 3, x: 405, y: 130, w: 20, h: 10, type: 'sequence', pressed: false },
+      { id: 4, x: 535, y: 200, w: 20, h: 10, type: 'sequence', pressed: false },
+      { id: 5, x: 665, y: 270, w: 20, h: 10, type: 'sequence', pressed: false }
+    ],
+    door: { x: 740, y: 280, w: 20, h: 80, open: false },
+    spawn: { x: 30, y: 300 }
+  }
+];
+
+let GRAVITY = 0.5;
+
+const player = {
+  x: 50, y: 300, w: 24, h: 32,
+  vx: 0, vy: 0, speed: 4, jumpForce: 10,
+  grounded: false, facing: 'right', history: []
+};
+
+let ghost = null;
+
+function applyDifficulty(diff) {
+  difficulty = diff;
+  if (diff === 'easy') { player.speed = 4.5; player.jumpForce = 11; }
+  else if (diff === 'normal') { player.speed = 4; player.jumpForce = 10; }
+  else if (diff === 'hard') { player.speed = 3.5; player.jumpForce = 9.5; }
+}
+
+function startGame(diff) {
+  applyDifficulty(diff);
+  document.getElementById('tutorialOverlay').style.display = 'none';
+  document.getElementById('winOverlay').style.display = 'none';
+  currentLevelIndex = 0;
+  loadLevel(currentLevelIndex);
+  isGameRunning = true;
+  requestAnimationFrame(gameLoop);
+}
+
+function loadLevel(index) {
+  const lvl = levels[index];
+  player.x = lvl.spawn.x;
+  player.y = lvl.spawn.y;
+  player.vx = 0; player.vy = 0;
+  player.history = [];
+  ghost = null;
+  rewindsUsed = 0;
+
+  if (lvl.isPuzzle) {
+    lvl.currentStep = 0;
+  }
+
+  lvl.buttons.forEach(b => {
+    b.pressed = false;
+    b.justPressed = false;
+    if (b.type === 'timer') b.timer = 0;
+  });
+  lvl.door.open = false;
+}
+
+function skipLevel() {
+  if (!isGameRunning) return;
+  currentLevelIndex++;
+  if (currentLevelIndex < levels.length) {
+    loadLevel(currentLevelIndex);
+  } else {
+    isGameRunning = false;
+    document.getElementById('winOverlay').style.display = 'flex';
+  }
+}
+
+function resetGame() {
+  document.getElementById('winOverlay').style.display = 'none';
+  document.getElementById('tutorialOverlay').style.display = 'flex';
+  isGameRunning = false;
+}
+
+// --- CONTROLES DE TECLADO E TOQUE ---
+const keys = { left: false, right: false, jump: false, rewind: false };
+
+window.addEventListener('keydown', (e) => handleKey(e, true));
+window.addEventListener('keyup', (e) => handleKey(e, false));
+
+function handleKey(e, isPressed) {
+  if (['KeyA', 'ArrowLeft'].includes(e.code)) keys.left = isPressed;
+  if (['KeyD', 'ArrowRight'].includes(e.code)) keys.right = isPressed;
+  if (['KeyW', 'ArrowUp', 'Space'].includes(e.code)) keys.jump = isPressed;
+  if (e.code === 'KeyR') {
+    if (isPressed && !keys.rewind && isGameRunning) triggerRewind();
+    keys.rewind = isPressed;
+  }
+}
+
+function bindTouch(id, keyName, isRewind = false) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (isRewind && isGameRunning) triggerRewind();
+    keys[keyName] = true;
+  });
+  el.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    keys[keyName] = false;
+  });
+}
+
+bindTouch('btnLeft', 'left');
+bindTouch('btnRight', 'right');
+bindTouch('btnJump', 'jump');
+bindTouch('btnRewind', 'rewind', true);
+
+function triggerRewind() {
+  if (player.history.length === 0) return;
+  rewindsUsed++;
+  ghost = {
+    actions: [...player.history],
+    frameIndex: 0,
+    timer: 1200,
+    maxTimer: 1200,
+    speedMultiplier: 1,
+    active: true
+  };
+  const lvl = levels[currentLevelIndex];
+  player.x = lvl.spawn.x;
+  player.y = lvl.spawn.y;
+  player.vx = 0; player.vy = 0;
+  player.history = [];
+}
+
+// --- LÓGICA DE COLISÃO SÓLIDA ---
+function moveAndCollide(obj, platforms) {
+  obj.x += obj.vx;
+  platforms.forEach(p => {
+    if (checkOverlap(obj, p)) {
+      if (obj.vx > 0) obj.x = p.x - obj.w;
+      else if (obj.vx < 0) obj.x = p.x + p.w;
+    }
+  });
+
+  obj.y += obj.vy;
+  obj.grounded = false;
+  platforms.forEach(p => {
+    if (checkOverlap(obj, p)) {
+      if (obj.vy > 0) {
+        obj.y = p.y - obj.h;
+        obj.vy = 0;
+        obj.grounded = true;
+      } else if (obj.vy < 0) {
+        obj.y = p.y + p.h;
+        obj.vy = 0;
+      }
+    }
+  });
+}
+
+function update() {
+  if (!isGameRunning) return;
+
+  const lvl = levels[currentLevelIndex];
+
+  let ghostPos = null;
+  if (ghost && ghost.active) {
+    if (ghost.frameIndex < ghost.actions.length) {
+      ghostPos = ghost.actions[Math.floor(ghost.frameIndex)];
+      ghost.frameIndex += ghost.speedMultiplier;
+      if (ghost.frameIndex >= ghost.actions.length) {
+        ghost.frameIndex = ghost.actions.length - 1;
+      }
+    } else {
+      ghostPos = ghost.actions[ghost.actions.length - 1];
+    }
+
+    ghost.timer--;
+    if (ghost.timer <= 0) {
+      ghost.active = false;
+      ghost = null;
+      ghostPos = null;
+    }
+  }
+
+  const activePlatforms = [...lvl.platforms];
+ // --- DESENHO DO PERSONAGEM (ESQUILO PIXEL ART) ---
+function drawCharacter(x, y, w, h, facing, alpha = 1.0, isGhost = false) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Paleta de cores do esquilo (ou tom azulado se for o Fantasma)
+  const cBody   = isGhost ? '#8be9fd' : '#d97724'; // Castanho alaranjado
+  const cDark   = isGhost ? '#6272a4' : '#a34e0e'; // Sombra / Detalhes
+  const cBelly  = isGhost ? '#f8f8f2' : '#ffdaab'; // Creme / Pêssego
+  const cPink   = isGhost ? '#ff79c6' : '#ff9ebb'; // Rosa das bochechas/orelha
+  const cEye    = isGhost ? '#282a36' : '#1e1005'; // Cor dos olhos
+
+  const p = 2; // Tamanho do pixel de referência
+  const isRight = facing === 'right';
+
+  // Offset para animação suave de corrida/pulo
+  const runCycle = Math.sin(Date.now() / 80) * 1.5;
+
+  // --- 1. RABO FELPUDO GRANDE (ATRÁS DO CORPO) ---
+  const tailX = isRight ? x - p * 4 : x + w - p * 2;
+  const tailY = y + p * 2 + runCycle;
+
+  ctx.fillStyle = cDark;
+  ctx.fillRect(tailX, tailY, p * 6, p * 10);
+  ctx.fillRect(tailX + (isRight ? -p * 2 : p * 2), tailY - p * 2, p * 6, p * 8);
+
+  ctx.fillStyle = cBody;
+  ctx.fillRect(tailX + (isRight ? -p * 1 : p * 1), tailY - p * 1, p * 5, p * 8);
+  ctx.fillRect(tailX + (isRight ? -p * 3 : p * 3), tailY - p * 4, p * 5, p * 6);
+
+  ctx.fillStyle = cBelly; // Ponta clara do rabo
+  ctx.fillRect(tailX + (isRight ? -p * 4 : p * 4), tailY - p * 6, p * 4, p * 4);
+
+  // --- 2. CORPO E PATINHAS ---
+  ctx.fillStyle = cBody;
+  ctx.fillRect(x + p * 2, y + p * 6, p * 8, p * 8);
+
+  // Patinhas inferiores
+  ctx.fillStyle = cDark;
+  ctx.fillRect(x + p * 2, y + h - p * 2, p * 3, p * 2);
+  ctx.fillRect(x + p * 7, y + h - p * 2, p * 3, p * 2);
+
+  // --- 3. BARRIGUINHA FOFA ---
+  ctx.fillStyle = cBelly;
+  ctx.fillRect(x + (isRight ? p * 4 : p * 2), y + p * 7, p * 5, p * 6);
+
+  // --- 4. ORELHAS REDONDINHAS ---
+  const earLeftX = x + p * 2;
+  const earRightX = x + p * 7;
+  const earY = y - p * 2;
+
+  ctx.fillStyle = cBody;
+  ctx.fillRect(earLeftX, earY, p * 3, p * 3);
+  ctx.fillRect(earRightX, earY, p * 3, p * 3);
+
+  // Interior rosa da orelha
+  ctx.fillStyle = cPink;
+  ctx.fillRect(earLeftX + p, earY + p, p, p);
+  ctx.fillRect(earRightX + p, earY + p, p, p);
+
+  // --- 5. CABEÇA ---
+  ctx.fillStyle = cBody;
+  ctx.fillRect(x + p, y + p, p * 10, p * 6);
+
+  // --- 6. OLHOS GRANDES ESTILO KAWAII ---
+  const eyeX1 = isRight ? x + p * 5 : x + p * 2;
+  const eyeX2 = isRight ? x + p * 8 : x + p * 5;
+  const eyeY  = y + p * 2;
+
+  ctx.fillStyle = cEye;
+  ctx.fillRect(eyeX1, eyeY, p * 2, p * 3);
+  ctx.fillRect(eyeX2, eyeY, p * 2, p * 3);
+
+  // Brilho dos olhos (ponto branco)
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(eyeX1, eyeY, p, p);
+  ctx.fillRect(eyeX2, eyeY, p, p);
+
+  // Focinho e Narizinho
+  ctx.fillStyle = cBelly;
+  ctx.fillRect(isRight ? x + p * 7 : x + p * 2, y + p * 4, p * 3, p * 2);
+  ctx.fillStyle = cDark;
+  ctx.fillRect(isRight ? x + p * 9 : x + p * 2, y + p * 4, p, p);
+
+  // Bochechas rosadas
+  ctx.fillStyle = cPink;
+  ctx.fillRect(isRight ? x + p * 4 : x + p * 2, y + p * 4, p * 2, p);
+  ctx.fillRect(isRight ? x + p * 8 : x + p * 6, y + p * 4, p * 2, p);
+
+  ctx.restore();
+}
+    ctx.fillStyle = '#ffffff';
+    drawPixelCloud(100, 80, 1.2);
+    drawPixelCloud(450, 120, 1.5);
+    drawPixelCloud(680, 60, 0.9);
+
+  } else if (bgType === 'sunset') {
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#534372');
+    grad.addColorStop(0.5, '#a2628e');
+    grad.addColorStop(1, '#e39d7c');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.fillStyle = '#fce4ec';
+    drawPixelCloud(80, 100, 1.1);
+    drawPixelCloud(500, 90, 1.4);
+
+  } else if (bgType === 'night_crescent') {
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#212a52');
+    grad.addColorStop(0.6, '#384d72');
+    grad.addColorStop(1, '#51719c');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.fillStyle = '#fbfcc4';
+    bgStars.forEach(s => ctx.fillRect(s.x, s.y, s.size, s.size));
+
+    drawPixelCrescent(620, 50);
+
+    ctx.fillStyle = 'rgba(180, 210, 240, 0.4)';
+    drawPixelCloud(60, 120, 1.3);
+    drawPixelCloud(400, 160, 1.5);
+
+  } else if (bgType === 'night_fullmoon') {
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#09101d');
+    grad.addColorStop(0.7, '#0f1c30');
+    grad.addColorStop(1, '#152b48');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.fillStyle = '#8be9fd';
+    bgStars.forEach(s => {
+      ctx.fillRect(s.x, s.y, s.size, s.size);
+    });
+
+    drawPixelFullMoon(400, 100);
+
+    ctx.fillStyle = 'rgba(20, 50, 80, 0.7)';
+    drawPixelCloud(120, 160, 1.6);
+    drawPixelCloud(480, 180, 1.8);
+  }
+}
+
+function drawPixelCloud(cx, cy, scale) {
+  const p = 6 * scale;
+  ctx.fillRect(cx + p*2, cy, p*6, p*2);
+  ctx.fillRect(cx, cy + p, p*10, p*3);
+  ctx.fillRect(cx - p, cy + p*2, p*12, p*2);
+}
+
+function drawPixelCrescent(mx, my) {
+  const p = 4;
+  ctx.fillRect(mx + p*2, my, p*2, p);
+  ctx.fillRect(mx + p, my + p, p*2, p);
+  ctx.fillRect(mx, my + p*2, p*2, p*3);
+  ctx.fillRect(mx + p, my + p*5, p*2, p);
+  ctx.fillRect(mx + p*2, my + p*6, p*2, p);
+}
+
+function drawPixelFullMoon(mx, my) {
+  const p = 5;
+  ctx.fillStyle = '#ffffe0';
+  ctx.fillRect(mx - p*3, my - p*5, p*6, p*10);
+  ctx.fillRect(mx - p*5, my - p*3, p*10, p*6);
+  ctx.fillRect(mx - p*4, my - p*4, p*8, p*8);
+
+  ctx.fillStyle = '#dcdcb0';
+  ctx.fillRect(mx - p*2, my - p*3, p*2, p*2);
+  ctx.fillRect(mx + p, my - p, p*2, p*3);
+  ctx.fillRect(mx - p*3, my + p, p*3, p*2);
+}
+
+function drawCharacter(x, y, w, h, facing, bodyColor, eyeColor, alpha = 1.0) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  
+  ctx.fillStyle = bodyColor;
+  ctx.fillRect(x, y, w, h);
+
+  ctx.fillStyle = eyeColor;
+  const eyeSize = 4;
+  const eyeY = y + 8;
+  
+  if (facing === 'right') {
+    ctx.fillRect(x + w - 8, eyeY, eyeSize, eyeSize);
+    ctx.fillRect(x + w - 16, eyeY, eyeSize, eyeSize);
+  } else {
+    ctx.fillRect(x + 4, eyeY, eyeSize, eyeSize);
+    ctx.fillRect(x + 12, eyeY, eyeSize, eyeSize);
+  }
+  
+  ctx.restore();
+}
+
+function draw() {
+  const lvl = levels[currentLevelIndex];
+
+  // Fundo
+  drawPixelBackground(lvl.bgType);
+
+  // Plataformas
+  ctx.fillStyle = '#282a36';
+  ctx.strokeStyle = '#6272a4';
+  ctx.lineWidth = 2;
+  lvl.platforms.forEach(p => {
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    ctx.strokeRect(p.x, p.y, p.w, p.h);
+  });
+
+  // Botões
+  lvl.buttons.forEach(btn => {
+    if (lvl.isPuzzle) {
+      ctx.fillStyle = btn.pressed ? '#50fa7b' : '#ffb86c';
+    } else if (btn.type === 'hold') {
+      ctx.fillStyle = btn.pressed ? '#50fa7b' : '#ff5555';
+    } else {
+      ctx.fillStyle = btn.pressed ? '#f1fa8c' : '#ffb86c';
+    }
+    
+    const height = btn.pressed ? 4 : btn.h;
+    const yPos = btn.pressed ? btn.y + 6 : btn.y;
+    ctx.fillRect(btn.x, yPos, btn.w, height);
+
+    // Número do botão para o Enigma
+    if (lvl.isPuzzle) {
+      ctx.fillStyle = '#111';
+      ctx.font = 'bold 12px monospace';
+      ctx.fillText(btn.id, btn.x + 6, btn.y - 4);
+    }
+
+    // Barra do temporizador para botões de tempo
+    if (btn.type === 'timer' && btn.timer > 0) {
+      const pct = btn.timer / btn.timerDuration;
+      ctx.fillStyle = '#f1fa8c';
+      ctx.fillRect(btn.x, btn.y - 6, btn.w * pct, 3);
+    }
+  });
+
+  // Porta
+  ctx.fillStyle = lvl.door.open ? '#50fa7b' : '#ff5555';
+  ctx.fillRect(lvl.door.x, lvl.door.y, lvl.door.w, lvl.door.h);
+  ctx.strokeStyle = '#fff';
+  ctx.strokeRect(lvl.door.x, lvl.door.y, lvl.door.w, lvl.door.h);
+
+  // Fantasma (se ativo)
+  if (ghost && ghost.active) {
+    let idx = Math.floor(ghost.frameIndex);
+    let gPos = idx < ghost.actions.length ? ghost.actions[idx] : ghost.actions[ghost.actions.length - 1];
+    if (gPos) {
+      drawCharacter(gPos.x, gPos.y, player.w, player.h, gPos.facing, '#8be9fd', '#bd93f9', 0.6);
+      
+      const pct = ghost.timer / ghost.maxTimer;
+      ctx.fillStyle = '#8be9fd';
+      ctx.fillRect(gPos.x, gPos.y - 8, player.w * pct, 4);
+    }
+  }
+
+  // Jogador
+  drawCharacter(player.x, player.y, player.w, player.h, player.facing, '#bd93f9', '#50fa7b');
+
+  // Interface Superior (HUD)
+  ctx.fillStyle = '#fff';
+  ctx.font = '14px monospace';
+  ctx.fillText(`Fase: ${currentLevelIndex + 1} / 10`, 15, 25);
+  ctx.fillText(`Dificuldade: ${difficulty.toUpperCase()}`, 15, 45);
+
+  // Dica do Enigma na Fase 10
+  if (lvl.isPuzzle) {
+    ctx.fillStyle = '#f1fa8c';
+    ctx.font = '12px monospace';
+    const seqStr = lvl.puzzleSequence.join(' -> ');
+    ctx.fillText(`ENIGMA: [ ${seqStr} ] (${lvl.currentStep}/5)`, 250, 25);
+  }
+}
+
+function gameLoop() {
+  if (!isGameRunning) return;
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+</script>
+</body>
+</html>

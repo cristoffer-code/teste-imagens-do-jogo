@@ -296,7 +296,7 @@ const levels = [
 let GRAVITY = 0.5;
 
 const player = {
-  x: 50, y: 300, w: 24, h: 32,
+  x: 50, y: 300, w: 32, h: 32,
   vx: 0, vy: 0, speed: 4, jumpForce: 10,
   grounded: false, facing: 'right', history: []
 };
@@ -643,49 +643,68 @@ function drawPixelFullMoon(mx, my) {
   ctx.fillRect(mx - p*3, my + p, p*3, p*2);
 }
 
-function drawCharacter(x, y, w, h, facing, bodyColor, eyeColor, alpha = 1.0) {
+// Desenhar o Esquilo em Pixel Art idêntico à imagem enviada
+function drawCharacter(x, y, w, h, facing, overrideBodyColor = null, overrideEyeColor = null, alpha = 1.0) {
   ctx.save();
   ctx.globalAlpha = alpha;
 
-  const cBody = bodyColor;
-  const cDark = '#a34e0e';
-  const cBelly = '#ffdaab';
-  const cPink = '#ff9ebb';
-  const cEye = eyeColor;
+  // Matriz Pixel Art 16x16 representando o esquilo
+  // C: Castanho escuro/Contorno (#2A1108 ou #111111)
+  // B: Corpo castanho/Laranja (#C86118)
+  // L: Castanho claro/Sombra (#9E430B)
+  // W: Branco/Barriga/Bochecha (#FFFFFF)
+  // P: Rosa orelha (#F5A4B2)
+  // S: Listra branca no corpo (#F0EFEA)
+  // K: Olho preto (#111111)
+  const squirrelGrid = [
+    "....CCCC........",
+    "..CCBBBCCC......",
+    ".CBBWWBBBC......",
+    "CBBW..WBBCC.CP.C",
+    "CBBW..WBBBBCPPC.",
+    "CBBBWWBBBBBBCBCC",
+    ".CBBBBBBBBBBBKBC",
+    "..CBBSSSSBBBWKKC",
+    "..CBSCCCCSBBBWW.",
+    ".CBBBCCCCSBBBBWW",
+    "CBBBBCCCCSBBB...",
+    "CBBB.CCCCSBC....",
+    ".CBB..CC.CBB....",
+    "..CB.....CBB....",
+    "...C......CC....",
+    "................"
+  ];
 
-  const p = 2;
-  const isRight = facing === 'right';
-  const runCycle = Math.sin(Date.now() / 80) * 1.5;
+  const cols = 16;
+  const rows = 16;
+  const pixelW = w / cols;
+  const pixelH = h / rows;
 
-  // Rabo
-  const tailX = isRight ? x - p * 4 : x + w - p * 2;
-  const tailY = y + p * 2 + runCycle;
+  if (facing === 'left') {
+    ctx.translate(x + w, y);
+    ctx.scale(-1, 1);
+  } else {
+    ctx.translate(x, y);
+  }
 
-  ctx.fillStyle = cDark;
-  ctx.fillRect(tailX, tailY, p * 6, p * 10);
-  ctx.fillStyle = cBody;
-  ctx.fillRect(tailX + (isRight ? -p : p), tailY - p, p * 5, p * 8);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const char = squirrelGrid[r][c];
+      if (char === '.') continue;
 
-  // Corpo
-  ctx.fillStyle = cBody;
-  ctx.fillRect(x + p * 2, y + p * 6, p * 8, p * 8);
+      let color = '#000000';
+      if (char === 'C') color = '#2A1108';
+      else if (char === 'B') color = overrideBodyColor || '#C86118';
+      else if (char === 'L') color = '#9E430B';
+      else if (char === 'W') color = '#FFFFFF';
+      else if (char === 'P') color = '#F5A4B2';
+      else if (char === 'S') color = '#F0EFEA';
+      else if (char === 'K') color = overrideEyeColor || '#111111';
 
-  // Barriga
-  ctx.fillStyle = cBelly;
-  ctx.fillRect(x + (isRight ? p * 4 : p * 2), y + p * 7, p * 5, p * 6);
-
-  // Cabeça
-  ctx.fillStyle = cBody;
-  ctx.fillRect(x + p, y + p, p * 10, p * 6);
-
-  // Olhos
-  const eyeX1 = isRight ? x + p * 5 : x + p * 2;
-  const eyeX2 = isRight ? x + p * 8 : x + p * 5;
-  const eyeY = y + p * 2;
-
-  ctx.fillStyle = cEye;
-  ctx.fillRect(eyeX1, eyeY, p * 2, p * 3);
-  ctx.fillRect(eyeX2, eyeY, p * 2, p * 3);
+      ctx.fillStyle = color;
+      ctx.fillRect(c * pixelW, r * pixelH, pixelW + 0.3, pixelH + 0.3);
+    }
+  }
 
   ctx.restore();
 }
@@ -751,7 +770,7 @@ function draw() {
   }
 
   // Jogador
-  drawCharacter(player.x, player.y, player.w, player.h, player.facing, '#bd93f9', '#50fa7b');
+  drawCharacter(player.x, player.y, player.w, player.h, player.facing, null, null, 1.0);
 
   // HUD
   ctx.fillStyle = '#fff';

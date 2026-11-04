@@ -150,7 +150,6 @@ for(let i = 0; i < 40; i++) {
 
 // --- CONFIGURAÇÃO DAS 10 FASES ---
 const levels = [
-  // Fase 1: Introdução ao Botão Simples
   {
     bgType: 'day',
     platforms: [{ x: 0, y: 360, w: 800, h: 40 }],
@@ -158,7 +157,6 @@ const levels = [
     door: { x: 730, y: 280, w: 20, h: 80, open: false },
     spawn: { x: 50, y: 300 }
   },
-  // Fase 2: Plataforma Elevada
   {
     bgType: 'day',
     platforms: [
@@ -169,7 +167,6 @@ const levels = [
     door: { x: 730, y: 280, w: 20, h: 80, open: false },
     spawn: { x: 50, y: 300 }
   },
-  // Fase 3: Introdução ao Botão Temporizado
   {
     bgType: 'day',
     platforms: [
@@ -180,7 +177,6 @@ const levels = [
     door: { x: 730, y: 280, w: 20, h: 80, open: false },
     spawn: { x: 50, y: 300 }
   },
-  // Fase 4: Dois Botões em Lados Opostos (1 de Manter Pressionado + 1 Temporizado)
   {
     bgType: 'sunset',
     platforms: [
@@ -195,7 +191,6 @@ const levels = [
     door: { x: 730, y: 280, w: 20, h: 80, open: false },
     spawn: { x: 50, y: 300 }
   },
-  // Fase 5: Parede Central Dividindo o Mapa
   {
     bgType: 'sunset',
     platforms: [
@@ -210,7 +205,6 @@ const levels = [
     door: { x: 730, y: 280, w: 20, h: 80, open: false },
     spawn: { x: 50, y: 300 }
   },
-  // Fase 6: Três Plataformas em Escada
   {
     bgType: 'night_crescent',
     platforms: [
@@ -226,7 +220,6 @@ const levels = [
     door: { x: 730, y: 280, w: 20, h: 80, open: false },
     spawn: { x: 50, y: 300 }
   },
-  // Fase 7: Três Botões Simultâneos
   {
     bgType: 'night_crescent',
     platforms: [
@@ -243,7 +236,6 @@ const levels = [
     door: { x: 730, y: 280, w: 20, h: 80, open: false },
     spawn: { x: 50, y: 300 }
   },
-  // Fase 8: Desafio de Precisão em Pulos
   {
     bgType: 'night_fullmoon',
     platforms: [
@@ -259,7 +251,6 @@ const levels = [
     door: { x: 730, y: 280, w: 20, h: 80, open: false },
     spawn: { x: 50, y: 300 }
   },
-  // Fase 9: A Grande Barreira
   {
     bgType: 'night_fullmoon',
     platforms: [
@@ -277,7 +268,6 @@ const levels = [
     door: { x: 740, y: 280, w: 20, h: 80, open: false },
     spawn: { x: 40, y: 300 }
   },
-  // Fase 10: ENIGMA DE 5 BOTÕES (SEQUÊNCIA FIXA 4 -> 2 -> 5 -> 3 -> 1)
   {
     isPuzzle: true,
     puzzleSequence: [4, 2, 5, 3, 1],
@@ -368,7 +358,7 @@ function resetGame() {
   isGameRunning = false;
 }
 
-// --- CONTROLES DE TECLADO E TOQUE ---
+// --- CONTROLES ---
 const keys = { left: false, right: false, jump: false, rewind: false };
 
 window.addEventListener('keydown', (e) => handleKey(e, true));
@@ -421,7 +411,12 @@ function triggerRewind() {
   player.history = [];
 }
 
-// --- LÓGICA DE COLISÃO SÓLIDA ---
+function checkOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x &&
+         a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+// --- COLISÃO ---
 function moveAndCollide(obj, platforms) {
   obj.x += obj.vx;
   platforms.forEach(p => {
@@ -452,6 +447,22 @@ function update() {
 
   const lvl = levels[currentLevelIndex];
 
+  // Movimento do Jogador
+  if (keys.left) { player.vx = -player.speed; player.facing = 'left'; }
+  else if (keys.right) { player.vx = player.speed; player.facing = 'right'; }
+  else { player.vx = 0; }
+
+  if (keys.jump && player.grounded) {
+    player.vy = -player.jumpForce;
+    player.grounded = false;
+  }
+
+  player.vy += GRAVITY;
+
+  // Atualiza histórico do jogador para o Rewind
+  player.history.push({ x: player.x, y: player.y, facing: player.facing });
+
+  // Posição do Fantasma
   let ghostPos = null;
   if (ghost && ghost.active) {
     if (ghost.frameIndex < ghost.actions.length) {
@@ -472,98 +483,86 @@ function update() {
     }
   }
 
+  // Plataformas ativas (Fantasma age como plataforma)
   const activePlatforms = [...lvl.platforms];
- // --- DESENHO DO PERSONAGEM (ESQUILO PIXEL ART) ---
-function drawCharacter(x, y, w, h, facing, alpha = 1.0, isGhost = false) {
-  ctx.save();
-  ctx.globalAlpha = alpha;
+  if (ghostPos) {
+    activePlatforms.push({ x: ghostPos.x, y: ghostPos.y, w: player.w, h: player.h });
+  }
 
-  // Paleta de cores do esquilo (ou tom azulado se for o Fantasma)
-  const cBody   = isGhost ? '#8be9fd' : '#d97724'; // Castanho alaranjado
-  const cDark   = isGhost ? '#6272a4' : '#a34e0e'; // Sombra / Detalhes
-  const cBelly  = isGhost ? '#f8f8f2' : '#ffdaab'; // Creme / Pêssego
-  const cPink   = isGhost ? '#ff79c6' : '#ff9ebb'; // Rosa das bochechas/orelha
-  const cEye    = isGhost ? '#282a36' : '#1e1005'; // Cor dos olhos
+  moveAndCollide(player, activePlatforms);
 
-  const p = 2; // Tamanho do pixel de referência
-  const isRight = facing === 'right';
+  // Lógica de Botões
+  let allPressed = true;
 
-  // Offset para animação suave de corrida/pulo
-  const runCycle = Math.sin(Date.now() / 80) * 1.5;
+  lvl.buttons.forEach(btn => {
+    let isPlayerOn = checkOverlap(player, btn);
+    let isGhostOn = ghostPos ? checkOverlap({ x: ghostPos.x, y: ghostPos.y, w: player.w, h: player.h }, btn) : false;
+    let isBeingTouched = isPlayerOn || isGhostOn;
 
-  // --- 1. RABO FELPUDO GRANDE (ATRÁS DO CORPO) ---
-  const tailX = isRight ? x - p * 4 : x + w - p * 2;
-  const tailY = y + p * 2 + runCycle;
+    if (lvl.isPuzzle) {
+      if (isBeingTouched && !btn.justPressed) {
+        btn.justPressed = true;
+        let expectedId = lvl.puzzleSequence[lvl.currentStep];
+        if (btn.id === expectedId) {
+          btn.pressed = true;
+          lvl.currentStep++;
+        } else {
+          // Errou a sequência: Reseta
+          lvl.currentStep = 0;
+          lvl.buttons.forEach(b => { b.pressed = false; b.justPressed = false; });
+        }
+      } else if (!isBeingTouched) {
+        btn.justPressed = false;
+      }
+    } else {
+      if (btn.type === 'hold') {
+        btn.pressed = isBeingTouched;
+      } else if (btn.type === 'timer') {
+        if (isBeingTouched) {
+          btn.timer = btn.timerDuration;
+          btn.pressed = true;
+        } else if (btn.timer > 0) {
+          btn.timer--;
+          btn.pressed = true;
+        } else {
+          btn.pressed = false;
+        }
+      }
+    }
 
-  ctx.fillStyle = cDark;
-  ctx.fillRect(tailX, tailY, p * 6, p * 10);
-  ctx.fillRect(tailX + (isRight ? -p * 2 : p * 2), tailY - p * 2, p * 6, p * 8);
+    if (!btn.pressed) allPressed = false;
+  });
 
-  ctx.fillStyle = cBody;
-  ctx.fillRect(tailX + (isRight ? -p * 1 : p * 1), tailY - p * 1, p * 5, p * 8);
-  ctx.fillRect(tailX + (isRight ? -p * 3 : p * 3), tailY - p * 4, p * 5, p * 6);
+  if (lvl.isPuzzle) {
+    lvl.door.open = (lvl.currentStep >= lvl.puzzleSequence.length);
+  } else {
+    lvl.door.open = allPressed;
+  }
 
-  ctx.fillStyle = cBelly; // Ponta clara do rabo
-  ctx.fillRect(tailX + (isRight ? -p * 4 : p * 4), tailY - p * 6, p * 4, p * 4);
-
-  // --- 2. CORPO E PATINHAS ---
-  ctx.fillStyle = cBody;
-  ctx.fillRect(x + p * 2, y + p * 6, p * 8, p * 8);
-
-  // Patinhas inferiores
-  ctx.fillStyle = cDark;
-  ctx.fillRect(x + p * 2, y + h - p * 2, p * 3, p * 2);
-  ctx.fillRect(x + p * 7, y + h - p * 2, p * 3, p * 2);
-
-  // --- 3. BARRIGUINHA FOFA ---
-  ctx.fillStyle = cBelly;
-  ctx.fillRect(x + (isRight ? p * 4 : p * 2), y + p * 7, p * 5, p * 6);
-
-  // --- 4. ORELHAS REDONDINHAS ---
-  const earLeftX = x + p * 2;
-  const earRightX = x + p * 7;
-  const earY = y - p * 2;
-
-  ctx.fillStyle = cBody;
-  ctx.fillRect(earLeftX, earY, p * 3, p * 3);
-  ctx.fillRect(earRightX, earY, p * 3, p * 3);
-
-  // Interior rosa da orelha
-  ctx.fillStyle = cPink;
-  ctx.fillRect(earLeftX + p, earY + p, p, p);
-  ctx.fillRect(earRightX + p, earY + p, p, p);
-
-  // --- 5. CABEÇA ---
-  ctx.fillStyle = cBody;
-  ctx.fillRect(x + p, y + p, p * 10, p * 6);
-
-  // --- 6. OLHOS GRANDES ESTILO KAWAII ---
-  const eyeX1 = isRight ? x + p * 5 : x + p * 2;
-  const eyeX2 = isRight ? x + p * 8 : x + p * 5;
-  const eyeY  = y + p * 2;
-
-  ctx.fillStyle = cEye;
-  ctx.fillRect(eyeX1, eyeY, p * 2, p * 3);
-  ctx.fillRect(eyeX2, eyeY, p * 2, p * 3);
-
-  // Brilho dos olhos (ponto branco)
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(eyeX1, eyeY, p, p);
-  ctx.fillRect(eyeX2, eyeY, p, p);
-
-  // Focinho e Narizinho
-  ctx.fillStyle = cBelly;
-  ctx.fillRect(isRight ? x + p * 7 : x + p * 2, y + p * 4, p * 3, p * 2);
-  ctx.fillStyle = cDark;
-  ctx.fillRect(isRight ? x + p * 9 : x + p * 2, y + p * 4, p, p);
-
-  // Bochechas rosadas
-  ctx.fillStyle = cPink;
-  ctx.fillRect(isRight ? x + p * 4 : x + p * 2, y + p * 4, p * 2, p);
-  ctx.fillRect(isRight ? x + p * 8 : x + p * 6, y + p * 4, p * 2, p);
-
-  ctx.restore();
+  // Passar de fase ao entrar na porta aberta
+  if (lvl.door.open && checkOverlap(player, lvl.door)) {
+    currentLevelIndex++;
+    if (currentLevelIndex < levels.length) {
+      loadLevel(currentLevelIndex);
+    } else {
+      isGameRunning = false;
+      document.getElementById('winOverlay').style.display = 'flex';
+    }
+  }
 }
+
+// --- DESENHO DE ELEMENTOS EM PIXEL ART ---
+function drawPixelBackground(bgType) {
+  const w = canvas.width;
+  const h = canvas.height;
+
+  if (bgType === 'day') {
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#70a5fd');
+    grad.addColorStop(1, '#bce0fd');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
     ctx.fillStyle = '#ffffff';
     drawPixelCloud(100, 80, 1.2);
     drawPixelCloud(450, 120, 1.5);
@@ -591,7 +590,6 @@ function drawCharacter(x, y, w, h, facing, alpha = 1.0, isGhost = false) {
 
     ctx.fillStyle = '#fbfcc4';
     bgStars.forEach(s => ctx.fillRect(s.x, s.y, s.size, s.size));
-
     drawPixelCrescent(620, 50);
 
     ctx.fillStyle = 'rgba(180, 210, 240, 0.4)';
@@ -607,10 +605,7 @@ function drawCharacter(x, y, w, h, facing, alpha = 1.0, isGhost = false) {
     ctx.fillRect(0, 0, w, h);
 
     ctx.fillStyle = '#8be9fd';
-    bgStars.forEach(s => {
-      ctx.fillRect(s.x, s.y, s.size, s.size);
-    });
-
+    bgStars.forEach(s => ctx.fillRect(s.x, s.y, s.size, s.size));
     drawPixelFullMoon(400, 100);
 
     ctx.fillStyle = 'rgba(20, 50, 80, 0.7)';
@@ -651,29 +646,53 @@ function drawPixelFullMoon(mx, my) {
 function drawCharacter(x, y, w, h, facing, bodyColor, eyeColor, alpha = 1.0) {
   ctx.save();
   ctx.globalAlpha = alpha;
-  
-  ctx.fillStyle = bodyColor;
-  ctx.fillRect(x, y, w, h);
 
-  ctx.fillStyle = eyeColor;
-  const eyeSize = 4;
-  const eyeY = y + 8;
-  
-  if (facing === 'right') {
-    ctx.fillRect(x + w - 8, eyeY, eyeSize, eyeSize);
-    ctx.fillRect(x + w - 16, eyeY, eyeSize, eyeSize);
-  } else {
-    ctx.fillRect(x + 4, eyeY, eyeSize, eyeSize);
-    ctx.fillRect(x + 12, eyeY, eyeSize, eyeSize);
-  }
-  
+  const cBody = bodyColor;
+  const cDark = '#a34e0e';
+  const cBelly = '#ffdaab';
+  const cPink = '#ff9ebb';
+  const cEye = eyeColor;
+
+  const p = 2;
+  const isRight = facing === 'right';
+  const runCycle = Math.sin(Date.now() / 80) * 1.5;
+
+  // Rabo
+  const tailX = isRight ? x - p * 4 : x + w - p * 2;
+  const tailY = y + p * 2 + runCycle;
+
+  ctx.fillStyle = cDark;
+  ctx.fillRect(tailX, tailY, p * 6, p * 10);
+  ctx.fillStyle = cBody;
+  ctx.fillRect(tailX + (isRight ? -p : p), tailY - p, p * 5, p * 8);
+
+  // Corpo
+  ctx.fillStyle = cBody;
+  ctx.fillRect(x + p * 2, y + p * 6, p * 8, p * 8);
+
+  // Barriga
+  ctx.fillStyle = cBelly;
+  ctx.fillRect(x + (isRight ? p * 4 : p * 2), y + p * 7, p * 5, p * 6);
+
+  // Cabeça
+  ctx.fillStyle = cBody;
+  ctx.fillRect(x + p, y + p, p * 10, p * 6);
+
+  // Olhos
+  const eyeX1 = isRight ? x + p * 5 : x + p * 2;
+  const eyeX2 = isRight ? x + p * 8 : x + p * 5;
+  const eyeY = y + p * 2;
+
+  ctx.fillStyle = cEye;
+  ctx.fillRect(eyeX1, eyeY, p * 2, p * 3);
+  ctx.fillRect(eyeX2, eyeY, p * 2, p * 3);
+
   ctx.restore();
 }
 
 function draw() {
   const lvl = levels[currentLevelIndex];
 
-  // Fundo
   drawPixelBackground(lvl.bgType);
 
   // Plataformas
@@ -699,14 +718,12 @@ function draw() {
     const yPos = btn.pressed ? btn.y + 6 : btn.y;
     ctx.fillRect(btn.x, yPos, btn.w, height);
 
-    // Número do botão para o Enigma
     if (lvl.isPuzzle) {
       ctx.fillStyle = '#111';
       ctx.font = 'bold 12px monospace';
       ctx.fillText(btn.id, btn.x + 6, btn.y - 4);
     }
 
-    // Barra do temporizador para botões de tempo
     if (btn.type === 'timer' && btn.timer > 0) {
       const pct = btn.timer / btn.timerDuration;
       ctx.fillStyle = '#f1fa8c';
@@ -720,7 +737,7 @@ function draw() {
   ctx.strokeStyle = '#fff';
   ctx.strokeRect(lvl.door.x, lvl.door.y, lvl.door.w, lvl.door.h);
 
-  // Fantasma (se ativo)
+  // Fantasma
   if (ghost && ghost.active) {
     let idx = Math.floor(ghost.frameIndex);
     let gPos = idx < ghost.actions.length ? ghost.actions[idx] : ghost.actions[ghost.actions.length - 1];
@@ -736,13 +753,12 @@ function draw() {
   // Jogador
   drawCharacter(player.x, player.y, player.w, player.h, player.facing, '#bd93f9', '#50fa7b');
 
-  // Interface Superior (HUD)
+  // HUD
   ctx.fillStyle = '#fff';
   ctx.font = '14px monospace';
   ctx.fillText(`Fase: ${currentLevelIndex + 1} / 10`, 15, 25);
   ctx.fillText(`Dificuldade: ${difficulty.toUpperCase()}`, 15, 45);
 
-  // Dica do Enigma na Fase 10
   if (lvl.isPuzzle) {
     ctx.fillStyle = '#f1fa8c';
     ctx.font = '12px monospace';
